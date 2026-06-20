@@ -1,0 +1,30 @@
+{
+  // Reference devcontainer for harness-gated repos. Copy into a project repo so
+  // "clone -> container builds -> gate armed" is true on any laptop or a browser
+  // (Codespaces). Codespaces has NO GPU (deprecated 2025-08-29), so torch is CPU-only
+  // here; GPU runs stay on a local WSL2 host.
+  "name": "research-harness",
+  "image": "mcr.microsoft.com/devcontainers/python:1-3.11-bookworm",
+
+  "features": {
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+
+  // No-secret setup (bakes into prebuilds): tooling + a gate self-check.
+  "onCreateCommand": "pip install --upgrade pip pre-commit pytest && (python tools/check_claims.py --root . || true)",
+
+  // Hook-arming + anything needing a token (prebuilds run with no user secrets).
+  "postCreateCommand": "pre-commit install || true",
+
+  "remoteEnv": { "PYTHONPATH": "${containerWorkspaceFolder}" },
+
+  "customizations": {
+    "vscode": {
+      "extensions": ["ms-python.python", "charliermarsh.ruff"]
+    }
+  }
+
+  // For a torch repo, add to onCreateCommand:
+  //   pip install torch --index-url https://download.pytorch.org/whl/cpu
+  // and assert torch.cuda.is_available() in CI to make the CPU-only reality explicit.
+}
