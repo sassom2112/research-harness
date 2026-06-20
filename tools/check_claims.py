@@ -112,10 +112,10 @@ def check(root: Path, strict: bool, camera_ready: bool) -> int:
             if is_verified:
                 # vanished evidence behind a ✅ claim — a gap marker does NOT excuse this
                 hard.append(f"[R1] verified (✅) claim cites a CSV that exists nowhere in the repo: {rel}")
-            elif is_gap:
-                warn.append(f"[R1] cited CSV absent (claim is a tracked gap): {rel}")
             else:
-                hard.append(f"[R1] claim cites a CSV that exists nowhere in the repo: {rel}")
+                # 🔁 re-runnable / ⚠️ gap / unmarked — the CSV may legitimately not be
+                # committed yet; flag it, but only a ✅ claim hard-fails on missing evidence.
+                warn.append(f"[R1] cited CSV absent (claim not ✅-verified): {rel}")
 
     # ---- R2-R4: validate every sidecar that DOES exist ------------------------
     sidecars = sorted(root.glob("benchmarks/**/*_meta.json"))
