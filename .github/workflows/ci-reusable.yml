@@ -1,0 +1,68 @@
+name: research-harness-ci
+
+# Reusable CI gate. Consume from another repo with:
+#   jobs:
+#     ci:
+#       uses: OWNER/research-harness/.github/workflows/ci-reusable.yml@<40-char-sha>
+# Mark only the `ci-passed` check required in the consuming repo's ruleset.
+on:
+  workflow_call:
+    inputs:
+      python-version:
+        type: string
+        default: "3.11"
+      run-claims-gate:
+        type: boolean
+        default: true
+      test-command:
+        type: string
+        default: "pytest -q"
+      install-command:
+        type: string
+        default: "pip install -e ."
+
+permissions:
+  contents: read
+
+jobs:
+  claims:
+    name: claims-gate
+    if: ${{ inputs.run-claims-gate }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python-version }}
+      # Gate is pure stdlib; run the repo's own copy if vendored, else the package CLI.
+      - run: |
+          if [ -f tools/check_claims.py ]; then python tools/check_claims.py
+          else check-claims; fi
+
+  test:
+    name: tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python-version }}
+      - run: ${{ inputs.install-command }}
+      - run: ${{ inputs.test-command }}
+
+  ci-passed:
+    name: ci-passed
+    needs: [claims, test]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      # A SKIPPED claims gate (run-claims-gate=false) is allowed; a FAILED one is not.
+      # Never let a skip read as a pass (red-team #9), and never paths-filter this job
+      # or docs-only PRs pin to "pending" forever (red-team #20).
+      - run: |
+          claims="${{ needs.claims.result }}"
+          tests="${{ needs.test.result }}"
+          echo "claims=$claims tests=$tests"
+          [ "$claims" = "success" ] || [ "$claims" = "skipped" ] || { echo "::error::claims gate failed"; exit 1; }
+          [ "$tests" = "success" ] || { echo "::error::tests failed"; exit 1; }
+          echo "ci-passed"
