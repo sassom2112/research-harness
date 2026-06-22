@@ -30,8 +30,8 @@ jobs:
     if: ${{ inputs.run-claims-gate }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ inputs.python-version }}
       # Gate is pure stdlib; run the repo's own copy if vendored, else the package CLI.
@@ -43,8 +43,8 @@ jobs:
     name: tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ inputs.python-version }}
       - run: ${{ inputs.install-command }}
