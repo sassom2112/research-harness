@@ -16,13 +16,17 @@ Schema-aware about provenance sidecars — validates both:
         (A gap marker may excuse a missing *number*; it never excuses a verified
         claim whose evidence file has vanished.)
     R2. A recorded SHA-256 (singular or per-file map) != the CSV's real digest.
+    R5. A "NN.N pp" number in the paper appears nowhere in CLAIMS.md (drift).
+        Matching is on the bare decimal, so "(std 22.6)" in CLAIMS covers a
+        "22.6 pp" in the paper. Every pp-number the paper states must trace to
+        the claims record — this is the rule that stops a stale headline from
+        shipping while the certified record disagrees.
     R7. The same output CSV is certified by two sidecars with different run
         configs — one physical file cannot be two different runs.
 
   WARN (exit 0; promoted to FAIL under --strict / --camera-ready)
     R3. A sidecar lists a missing output, or records no SHA-256 at all.
     R4. A sidecar has git_dirty=true (PROTOCOL.md §1: must be flagged ⚠️ in CLAIMS).
-    R5. A "NN.N pp" number in the paper has no matching number in CLAIMS.md (drift).
 
   CAMERA-READY (--camera-ready promotes WARNs to HARD FAIL)
     R6. CLAIMS.md still contains ⚠️ / "Unarchived" / "transitional" markers.
@@ -47,6 +51,7 @@ GAP_MARKERS = ("⚠️", "Unarchived", "transitional")
 CSV_PATH_RE = re.compile(r"`([^`]+?\.csv)`")          # any backticked CSV (path or bare name)
 HEADING_RE = re.compile(r"^#{2,3}\s")                 # ## Claim / ### subsection
 PP_NUMBER_RE = re.compile(r"[-+]?\d+\.\d+\s*pp")      # "+70.5 pp", "36.6 pp"
+DECIMAL_RE = re.compile(r"\d+\.\d+")                  # bare decimal for R5 matching
 
 
 def _sha256(path: Path) -> str:
@@ -184,20 +189,30 @@ def check(root: Path, strict: bool, camera_ready: bool) -> int:
         warn.append("[info] no *_meta.json sidecars under benchmarks/ — sidecar checks idle")
 
     # ---- R5: paper numbers that have drifted away from CLAIMS.md ---------------
+    # Compare on the bare decimal (sign/'pp' stripped): CLAIMS.md legitimately
+    # writes variance as "(std 22.6)" and ranges as "12.7--69.5" without the pp
+    # suffix, and those must not read as drift. A pp-number whose digits appear
+    # nowhere in CLAIMS.md is a HARD failure — the 2026-06 UNSW headline (79.1 pp
+    # in the tex, absent from the certified CLAIMS.md) shipped through the old
+    # warn-only version of this rule.
     if tex_path and tex_path.exists():
-        claims_numbers = {n.replace(" ", "") for n in PP_NUMBER_RE.findall(claims)}
+        claims_decimals = set(DECIMAL_RE.findall(claims))
         seen: set[str] = set()
         for raw in PP_NUMBER_RE.findall(tex_path.read_text(encoding="utf-8")):
-            norm = raw.replace(" ", "")
-            if norm not in claims_numbers and norm not in seen:
-                seen.add(norm)
-                warn.append(f"[R5] {tex_path.name} cites '{raw.strip()}' but no matching "
-                            f"number is in CLAIMS.md (drift?)")
+            bare = DECIMAL_RE.search(raw).group(0)
+            if bare not in claims_decimals and bare not in seen:
+                seen.add(bare)
+                hard.append(f"[R5] {tex_path.name} cites '{raw.strip()}' but the number "
+                            f"appears nowhere in CLAIMS.md (drift)")
 
     # ---- R6: camera-ready tolerates no open gaps ------------------------------
     if camera_ready:
+        # The "Status key" legend defines the markers themselves; it is documentation,
+        # not an open gap, so it must not self-trip R6. Scan only the real content.
+        scan = "\n".join(line for line in claims.splitlines()
+                         if not line.lstrip().startswith("**Status key:**"))
         for marker in GAP_MARKERS:
-            if marker in claims:
+            if marker in scan:
                 hard.append(f"[R6] camera-ready blocked: CLAIMS.md still contains '{marker}' entries")
                 break
 
