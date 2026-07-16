@@ -145,7 +145,11 @@ def check(root: Path, strict: bool, camera_ready: bool) -> int:
 
         sig = _provenance_sig(meta)
         for name in outputs:
-            owners.setdefault(name, []).append((str(rel), sig))
+            # Key ownership on the repo-relative PATH, not the bare basename:
+            # benchmarks/a/results.csv and benchmarks/b/results.csv are different
+            # physical files and may legitimately be certified by different runs.
+            owner_key = str((side.parent / name).relative_to(root))
+            owners.setdefault(owner_key, []).append((str(rel), sig))
             if not (side.parent / name).exists():
                 warn.append(f"[R3] sidecar {rel} references a missing output: {name}")
 
